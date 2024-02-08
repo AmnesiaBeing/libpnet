@@ -1,0 +1,5 @@
+{
+    "rust-analyzer.linkedProjects": [
+        "./pnet_packet/Cargo.toml"
+    ]
+}
