@@ -88,6 +88,7 @@ pub fn channel(network_interface: &NetworkInterface, config: Config) -> io::Resu
 }
 
 /// Create a datalink channel from a pcap file.
+#[allow(dead_code)]
 #[inline]
 pub fn from_file<P: AsRef<Path>>(path: P, config: Config) -> io::Result<super::Channel> {
     let cap = match pcap::Capture::from_file(path) {
