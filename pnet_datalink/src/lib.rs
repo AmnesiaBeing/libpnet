@@ -28,7 +28,7 @@ use ipnetwork::IpNetwork;
 
 pub use pnet_base::{MacAddr, ParseMacAddrErr};
 
-mod bindings;
+pub mod bindings;
 
 #[cfg(all(
     target_os = "windows",
