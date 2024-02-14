@@ -82,6 +82,7 @@ pub fn channel(network_interface: &NetworkInterface, config: Config) -> io::Resu
         }),
         Box::new(DataLinkReceiverImpl {
             capture: cap.clone(),
+            ts: Duration::default(),
             read_buffer: vec![0; config.read_buffer_size],
         }),
     ))
@@ -100,6 +101,7 @@ pub fn from_file<P: AsRef<Path>>(path: P, config: Config) -> io::Result<super::C
         Box::new(InvalidDataLinkSenderImpl {}),
         Box::new(DataLinkReceiverImpl {
             capture: cap.clone(),
+            ts: Duration::default(),
             read_buffer: vec![0; config.read_buffer_size],
         }),
     ))
@@ -163,20 +165,25 @@ impl DataLinkSender for InvalidDataLinkSenderImpl {
 
 struct DataLinkReceiverImpl<T: Activated + Send + Sync> {
     capture: Arc<Mutex<pcap::Capture<T>>>,
+    ts: Duration,
     read_buffer: Vec<u8>,
 }
 
 impl<T: Activated + Send + Sync> DataLinkReceiver for DataLinkReceiverImpl<T> {
-    fn next(&mut self) -> io::Result<&[u8]> {
+    fn next(&mut self) -> io::Result<(&Duration, &[u8])> {
         let mut cap = self.capture.lock().unwrap();
         match cap.next_packet() {
             Ok(pkt) => {
                 self.read_buffer.truncate(0);
                 self.read_buffer.extend(pkt.data);
+                let tv = pkt.header.ts;
+                self.ts = Duration::from_nanos(
+                    ((tv.tv_sec as i64) * 1_000_000_000 + (tv.tv_usec as i64) * 1_000) as u64,
+                );
             }
             Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e)),
         };
-        Ok(&self.read_buffer)
+        Ok((&self.ts, &self.read_buffer))
     }
 }
 

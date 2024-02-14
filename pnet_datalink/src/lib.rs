@@ -28,88 +28,10 @@ use ipnetwork::IpNetwork;
 
 pub use pnet_base::{MacAddr, ParseMacAddrErr};
 
-pub mod bindings;
-
-#[cfg(all(
-    target_os = "windows",
-    feature = "winpcap"
-))]
-#[path = "winpcap.rs"]
-mod backend;
-
-#[cfg(all(
-    target_os = "windows",
-    feature = "winpcap"
-))]
-pub mod winpcap;
-
-#[cfg(all(
-    feature = "linux_dll",
-    any(target_os = "linux", target_os = "android")
-))]
-#[path = "linux.rs"]
-mod backend;
-
-#[cfg(all(
-    feature = "linux_dll",
-    any(target_os = "linux", target_os = "android")
-))]
-pub mod linux;
-
-#[cfg(all(
-    feature = "bpf",
-    any(
-        target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "illumos",
-        target_os = "solaris",
-        target_os = "macos",
-        target_os = "ios"
-    )
-))]
-#[path = "bpf.rs"]
-mod backend;
-
-#[cfg(all(
-    feature = "bpf",
-    any(
-        target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "illumos",
-        target_os = "solaris",
-        target_os = "macos",
-        target_os = "ios"
-    )
-))]
-pub mod bpf;
-
-#[cfg(feature = "netmap")]
-#[path = "netmap.rs"]
-mod backend;
-
-#[cfg(feature = "netmap")]
-pub mod netmap;
-
-#[cfg(feature = "pcap")]
 #[path = "pcap.rs"]
 mod backend;
 
-#[cfg(feature = "pcap")]
 pub mod pcap;
-
-// no need any feature
-#[cfg(not(any(
-    feature = "bpf",
-    feature = "linux_dll",
-    feature = "netmap",
-    feature = "pcap"
-)))]
-#[path = "pcap.rs"]
-mod backend;
-
-pub mod dummy;
 
 /// Type alias for an `EtherType`.
 pub type EtherType = u16;
@@ -241,7 +163,7 @@ pub trait DataLinkSender: Send {
 /// `datalink_channel()`.
 pub trait DataLinkReceiver: Send {
     /// Get the next ethernet frame in the channel.
-    fn next(&mut self) -> io::Result<&[u8]>;
+    fn next(&mut self) -> io::Result<(&Duration, &[u8])>;
 }
 
 /// Represents a network interface and its associated addresses.
