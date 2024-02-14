@@ -250,3 +250,9 @@ impl PrimitiveValues for ::pnet_base::core_net::Ipv6Addr {
         )
     }
 }
+
+/// Used to determine a type is or not finited.
+pub trait FiniteValues {
+    /// check if value is finite
+    fn check_valid(&self) -> bool;
+}

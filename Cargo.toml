@@ -14,8 +14,6 @@ edition = "2021"
 
 [features]
 benchmark = []
-netmap = ["pnet_datalink/netmap_sys", "pnet_datalink/netmap"]
-pcap = ["pnet_datalink/pcap"]
 appveyor = []
 travis = []
 serde = ["pnet_base/serde", "pnet_datalink?/serde"]

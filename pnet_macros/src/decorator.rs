@@ -50,6 +50,8 @@ struct Field {
     struct_length: Option<String>,
     is_payload: bool,
     construct_with: Option<Vec<Type>>,
+    is_valid_check: bool,
+    // valid_check_fn: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -160,6 +162,8 @@ fn make_packet(s: &syn::DataStruct, name: String) -> Result<Packet, Error> {
         let mut is_payload = false;
         let mut packet_length = None;
         let mut struct_length = None;
+        let mut is_valid_check = false;
+        // let mut valid_check_fn = None;
         for attr in &field.attrs {
             match attr.meta {
                 syn::Meta::Path(ref p) => {
@@ -173,6 +177,8 @@ fn make_packet(s: &syn::DataStruct, name: String) -> Result<Packet, Error> {
                             }
                             is_payload = true;
                             payload_span = Some(field.span());
+                        } else if ident == "check_valid" {
+                            is_valid_check = true;
                         }
                     }
                 }
@@ -221,6 +227,20 @@ fn make_packet(s: &syn::DataStruct, name: String) -> Result<Packet, Error> {
                                 let tokens_packet = parse_length_expr(&tt_tokens, &field_names)?;
                                 let parsed = quote! { #(#tokens_packet)* };
                                 packet_length = Some(parsed.to_string());
+                            } else if ident == "valid_check_fn" {
+                                if let syn::Expr::Lit(syn::ExprLit {
+                                    lit: syn::Lit::Str(ref _s),
+                                    ..
+                                }) = name_value.value
+                                {
+                                    // valid_check_fn = Some(s.value() + "(&_self.to_immutable())");
+                                } else {
+                                    return Err(Error::new(
+                                        name_value.path.span(),
+                                        "#[valid_check_fn] should be used as #[valid_check_fn = \
+                                                   \"name_of_function\"]",
+                                    ));
+                                }
                             } else {
                                 return Err(Error::new(
                                     name_value.value.span(),
@@ -329,6 +349,12 @@ fn make_packet(s: &syn::DataStruct, name: String) -> Result<Packet, Error> {
                                   #[length_fn = \"\"] attribute",
                     ));
                 }
+                if is_valid_check {
+                    return Err(Error::new(
+                        field.ty.span(),
+                        "variable length field cannot specify #[valid_check]",
+                    ));
+                }
             }
             Type::Misc(_) => {
                 if construct_with.is_none() {
@@ -338,7 +364,14 @@ fn make_packet(s: &syn::DataStruct, name: String) -> Result<Packet, Error> {
                     ));
                 }
             }
-            _ => {}
+            Type::Primitive(..) => {
+                if is_valid_check {
+                    return Err(Error::new(
+                        field.ty.span(),
+                        "non-primitive field types cannot specify #[valid_check]",
+                    ));
+                }
+            }
         }
 
         fields.push(Field {
@@ -349,6 +382,8 @@ fn make_packet(s: &syn::DataStruct, name: String) -> Result<Packet, Error> {
             struct_length,
             is_payload,
             construct_with,
+            is_valid_check,
+            // valid_check_fn,
         });
     }
 
@@ -586,68 +621,96 @@ fn generate_packet_impl(
         (bit_offset / 8) + 1
     };
 
-    let s = format!("impl<'a> {name}<'a> {{
-        /// Constructs a new {name}. If the provided buffer is less than the minimum required
-        /// packet size, this will return None.
-        #[inline]
-        pub fn new<'p>(packet: &'p {mut} [u8]) -> Option<{name}<'p>> {{
-            if packet.len() >= {name}::minimum_packet_size() {{
-                use ::pnet_macros_support::packet::{cap_mut}PacketData;
-                Some({name} {{ packet: {cap_mut}PacketData::Borrowed(packet) }})
-            }} else {{
-                None
+    let check_valid_fn = {
+        let mut ret = String::new();
+        for field in &packet.fields {
+            if field.is_valid_check {
+                ret = ret + &format!("tmp.get_{field}().check_valid() & ", field = field.name);
+                print!("tmp.get_{}().check_valid() & ", field.name);
+            }
+        }
+        ret = ret + "true";
+        // print!("{}", ret);
+        ret
+    };
+
+    let s = format!(
+        "impl<'a> {name}<'a> {{
+            /// Constructs a new {name}.
+            /// If the provided buffer is less than the minimum required packet size, this will return None.
+            #[inline]
+            pub fn new<'p>(packet: &'p {mut} [u8]) -> Option<{name}<'p>> {{
+                if packet.len() >= {name}::minimum_packet_size() {{
+                    use ::pnet_macros_support::packet::{cap_mut}PacketData;
+                    Some({name} {{ packet: {cap_mut}PacketData::Borrowed(packet) }})
+                }} else {{
+                    None
+                }}
             }}
-        }}
 
-        /// Constructs a new {name}. If the provided buffer is less than the minimum required
-        /// packet size, this will return None. With this constructor the {name} will
-        /// own its own data and the underlying buffer will be dropped when the {name} is.
-        pub fn owned(packet: Vec<u8>) -> Option<{name}<'static>> {{
-            if packet.len() >= {name}::minimum_packet_size() {{
-                use ::pnet_macros_support::packet::{cap_mut}PacketData;
-                Some({name} {{ packet: {cap_mut}PacketData::Owned(packet) }})
-            }} else {{
-                None
+            /// Constructs a new {name}.
+            /// If the provided buffer is less than the minimum required packet size, this will return None.
+            ///  With this constructor the {name} will own its own data and the underlying buffer will be dropped when the {name} is.
+            pub fn owned(packet: Vec<u8>) -> Option<{name}<'static>> {{
+                if packet.len() >= {name}::minimum_packet_size() {{
+                    use ::pnet_macros_support::packet::{cap_mut}PacketData;
+                    Some({name} {{ packet: {cap_mut}PacketData::Owned(packet) }})
+                }} else {{
+                    None
+                }}
             }}
-        }}
 
-        /// Maps from a {name} to a {imm_name}
-        #[inline]
-        pub fn to_immutable<'p>(&'p self) -> {imm_name}<'p> {{
-            use ::pnet_macros_support::packet::PacketData;
-            {imm_name} {{ packet: PacketData::Borrowed(self.packet.as_slice()) }}
-        }}
+            /// Maps from a {name} to a {imm_name}
+            #[inline]
+            pub fn to_immutable<'p>(&'p self) -> {imm_name}<'p> {{
+                use ::pnet_macros_support::packet::PacketData;
+                {imm_name} {{ packet: PacketData::Borrowed(self.packet.as_slice()) }}
+            }}
 
-        /// Maps from a {name} to a {imm_name} while consuming the source
-        #[inline]
-        pub fn consume_to_immutable(self) -> {imm_name}<'a> {{
-            {imm_name} {{ packet: self.packet.to_immutable() }}
-        }}
+            /// Maps from a {name} to a {imm_name} while consuming the source
+            #[inline]
+            pub fn consume_to_immutable(self) -> {imm_name}<'a> {{
+                {imm_name} {{ packet: self.packet.to_immutable() }}
+            }}
 
-        /// The minimum size (in bytes) a packet of this type can be. It's based on the total size
-        /// of the fixed-size fields.
-        #[inline]
-        pub const fn minimum_packet_size() -> usize {{
-            {byte_size}
-        }}
+            /// The minimum size (in bytes) a packet of this type can be. It's based on the total size
+            /// of the fixed-size fields.
+            #[inline]
+            pub const fn minimum_packet_size() -> usize {{
+                {byte_size}
+            }}
 
-        {packet_size_struct}
+            /// call all check_valid function for all field and return
+            #[inline]
+            pub fn check_and_new<'p>(packet: &'p {mut} [u8]) -> Option<{name}<'p>> {{
+                if packet.len() >= {name}::minimum_packet_size() {{
+                    use ::pnet_macros_support::packet::{cap_mut}PacketData;
+                    let tmp = {name} {{ packet: {cap_mut}PacketData::Borrowed(packet) }};
+                    if {check_valid_fn} {{ Some(tmp) }} else {{ None }}
+                }} else {{
+                    None
+                }}
+            }}
 
-        {populate}
+            {packet_size_struct}
 
-        {accessors}
+            {populate}
 
-        {mutators}
-    }}", name = name,
-    imm_name = packet.packet_name(),
-    mut = if mutable { "mut" } else { "" },
-    cap_mut = if mutable { "Mut" } else { "" },
-    byte_size = byte_size,
-    accessors = accessors,
-    mutators = if mutable { &mutators[..] } else { "" },
-    populate = populate,
-    packet_size_struct = packet_size_struct
-        );
+            {accessors}
+
+            {mutators}
+            }}",
+        name = name,
+        imm_name = packet.packet_name(),
+        mut = if mutable { "mut" } else { "" },
+        cap_mut = if mutable { "Mut" } else { "" },
+        byte_size = byte_size,
+        accessors = accessors,
+        mutators = if mutable { &mutators[..] } else { "" },
+        populate = populate,
+        packet_size_struct = packet_size_struct,
+        check_valid_fn = check_valid_fn,
+    );
 
     let stmt: syn::Stmt = syn::parse_str(&s).expect("parse fn generate_packet_impl failed");
     let ts = quote! {

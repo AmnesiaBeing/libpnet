@@ -146,7 +146,17 @@ mod decorator;
 mod util;
 
 /// The entry point for the `derive(Packet)` custom derive
-#[proc_macro_derive(Packet, attributes(construct_with, length, length_fn, payload))]
+#[proc_macro_derive(
+    Packet,
+    attributes(
+        construct_with,
+        length,
+        length_fn,
+        payload,
+        check_valid,
+        check_valid_fn
+    )
+)]
 pub fn derive_packet(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     // ensure struct is public
