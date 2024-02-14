@@ -49,7 +49,7 @@ pub enum ChannelType {
 #[non_exhaustive]
 pub enum Channel {
     /// A datalink channel which sends and receives Ethernet packets.
-    Ethernet(Box<dyn DataLinkSender>, Box<dyn DataLinkReceiver>),
+    Ethernet(Box<dyn DataLinkReceiver>),
 }
 
 /// Socket fanout type (Linux only).
@@ -132,8 +132,8 @@ impl Default for Config {
 /// When matching on the returned channel, make sure to include a catch-all so that code doesn't
 /// break when new channel types are added.
 #[inline]
-pub fn channel(network_interface: &NetworkInterface, configuration: Config) -> io::Result<Channel> {
-    backend::channel(network_interface, (&configuration).into())
+pub fn channel(network_interface: &NetworkInterface, configuration: &Config) -> io::Result<Channel> {
+    backend::channel(network_interface, configuration)
 }
 
 /// Trait to enable sending `$packet` packets.
