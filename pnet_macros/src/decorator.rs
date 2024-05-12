@@ -854,7 +854,7 @@ fn generate_iterables(packet: &Packet) -> Result<proc_macro2::TokenStream, Error
             use pnet_macros_support::packet::PacketSize;
             use core::cmp::min;
             if self.buf.len() > 0 {{
-                if let Some(ret) = {name}Packet::new(self.buf) {{
+                if let Some(ret) = {name}Packet::check_and_new(self.buf) {{
                     let start = min(ret.packet_size(), self.buf.len());
                     self.buf = &self.buf[start..];
                     return Some(ret);
