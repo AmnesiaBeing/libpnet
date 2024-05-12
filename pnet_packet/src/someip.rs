@@ -227,6 +227,12 @@ fn someip_length(pkt: &SomeipPacket) -> usize {
     }
 }
 
+impl<'p> SomeipIterable<'p> {
+    pub fn new(buf: &[u8]) -> SomeipIterable {
+        SomeipIterable { buf: buf }
+    }
+}
+
 #[test]
 fn one_someip_packet_detect() {
     use pnet_macros_support::packet::Packet;
@@ -249,13 +255,76 @@ fn one_someip_packet_detect() {
     println!("packet_size:{:?}", someippkt.packet_size());
 }
 
+/// -----------------------------------------------------------------------------------------------
+/// Someip SD Entry Type
+/// -----------------------------------------------------------------------------------------------
+
+#[allow(non_snake_case)]
+#[allow(non_upper_case_globals)]
+pub mod SomeipSdEntryTypes {
+    // use super::SomeipSdEntryType;
+
+    // pub const Request: SomeipMessageType = SomeipMessageType(0x00);
+    // pub const RequestNoReturn: SomeipMessageType = SomeipMessageType(0x01);
+    // pub const Notification: SomeipMessageType = SomeipMessageType(0x02);
+    // pub const Response: SomeipMessageType = SomeipMessageType(0x80);
+    // pub const Error: SomeipMessageType = SomeipMessageType(0x81);
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SomeipSdEntryType(pub u8);
+
+impl SomeipSdEntryType {
+    pub fn new(value: u8) -> SomeipSdEntryType {
+        SomeipSdEntryType(value)
+    }
+}
+
+impl PrimitiveValues for SomeipSdEntryType {
+    type T = (u8,);
+    fn to_primitive_values(&self) -> Self::T {
+        (self.0,)
+    }
+}
+
+// impl FiniteValues for SomeipSdEntryType {
+//     fn check_valid(&self) -> bool {
+//         match *self {
+//             SomeipMessageTypes::Request
+//             | SomeipMessageTypes::RequestNoReturn
+//             | SomeipMessageTypes::Notification
+//             | SomeipMessageTypes::Response
+//             | SomeipMessageTypes::Error => true,
+//             _ => false,
+//         }
+//     }
+// }
+
+// impl fmt::Display for SomeipSdEntryType {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         write!(
+//             f,
+//             "{}",
+//             match self {
+//                 &SomeipMessageTypes::Request => "Request",
+//                 &SomeipMessageTypes::RequestNoReturn => "RequestNoReturn",
+//                 &SomeipMessageTypes::Notification => "Notication",
+//                 &SomeipMessageTypes::Response => "Response",
+//                 &SomeipMessageTypes::Error => "Error",
+//                 _ => "unknown",
+//             }
+//         )
+//     }
+// }
+
 // / -----------------------------------------------------------------------------------------------
 // / Someip SD Entry
 // / -----------------------------------------------------------------------------------------------
 
 #[derive(Packet, Debug)]
 pub struct SomeipSdEntry {
-    pub sd_entry_type: u8,
+    #[construct_with(u8)]
+    pub sd_entry_type: SomeipSdEntryType,
     pub index_of_1st_options_run: u8,
     pub index_of_2nd_options_run: u8,
     pub number_of_options_1: u4,
